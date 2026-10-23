@@ -100,6 +100,40 @@ export function freeSlots(input: FreeSlotsInput): number[] {
   return result;
 }
 
+export interface FreeWindowsInput {
+  /** Начало дня (местная полночь) в epoch ms, как в freeSlots. */
+  dayStart: number;
+  workRanges: WorkRange[];
+  appointments: Appointment[];
+  /** Окна короче этого не показываем, минуты. */
+  minMin?: number;
+  /** Обрезать окна, начавшиеся раньше этого момента (например, «сейчас»). */
+  notBefore?: number;
+}
+
+/** Свободные промежутки рабочего времени дня (с учётом запаса после записей) — для подсветки в календаре. */
+export function freeWindows(input: FreeWindowsInput): { start: number; end: number }[] {
+  const minLen = (input.minMin ?? 0) * MINUTE;
+  const busy = input.appointments
+    .filter(isActive)
+    .map(occupied)
+    .sort((x, y) => x.start - y.start);
+  const result: { start: number; end: number }[] = [];
+
+  for (const range of input.workRanges) {
+    const rangeEnd = input.dayStart + parseHm(range.to) * MINUTE;
+    let cursor = Math.max(input.dayStart + parseHm(range.from) * MINUTE, input.notBefore ?? -Infinity);
+    for (const b of busy) {
+      if (b.end <= cursor) continue;
+      if (b.start >= rangeEnd) break;
+      if (b.start - cursor >= minLen && b.start > cursor) result.push({ start: cursor, end: b.start });
+      cursor = Math.max(cursor, b.end);
+    }
+    if (rangeEnd - cursor >= minLen && rangeEnd > cursor) result.push({ start: cursor, end: rangeEnd });
+  }
+  return result;
+}
+
 export interface Shift {
   appointment: Appointment;
   newStart: number;

@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import { expect } from "./expect.ts";
-import { applyDelay, checkBooking, freeSlots, MINUTE, parseHm } from "../src/calendar.ts";
+import { applyDelay, checkBooking, freeSlots, freeWindows, MINUTE, parseHm } from "../src/calendar.ts";
 import type { Appointment } from "../src/types.ts";
 
 const DAY = Date.UTC(2026, 10, 2); // условная «полночь» дня
@@ -104,6 +104,46 @@ describe("freeSlots", () => {
       stepMin: 60,
     });
     expect(slots).toEqual([at("09:00"), at("10:00"), at("13:00")]);
+  });
+});
+
+describe("freeWindows", () => {
+  const span = (w: { start: number; end: number }) => [(w.start - DAY) / MINUTE / 60, (w.end - DAY) / MINUTE / 60];
+
+  it("находит промежутки между записями с учётом запаса и перерыва", () => {
+    const windows = freeWindows({
+      dayStart: DAY,
+      workRanges: [
+        { from: "09:00", to: "13:00" },
+        { from: "14:00", to: "19:00" },
+      ],
+      appointments: [
+        appt("a", "10:00", "12:00", { bufferAfterMin: 15 }),
+        appt("p", "11:00", "12:30", { parallel: true }),
+        appt("b", "15:00", "16:00"),
+        appt("x", "17:00", "18:00", { status: "cancelled" }),
+      ],
+    });
+    expect(windows.map(span)).toEqual([
+      [9, 10],
+      [12.5, 13],
+      [14, 15],
+      [16, 19],
+    ]);
+  });
+
+  it("отбрасывает короткие окна и прошедшее время", () => {
+    const windows = freeWindows({
+      dayStart: DAY,
+      workRanges: [{ from: "09:00", to: "19:00" }],
+      appointments: [appt("a", "10:00", "13:00"), appt("b", "13:20", "15:00")],
+      minMin: 30,
+      notBefore: at("09:30"),
+    });
+    expect(windows.map(span)).toEqual([
+      [9.5, 10],
+      [15, 19],
+    ]);
   });
 });
 

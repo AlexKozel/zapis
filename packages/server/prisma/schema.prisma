@@ -15,8 +15,8 @@ model Master {
   name         String
   phone        String?
   telegramId   BigInt?       @unique
-  timeZone     String        @default("Europe/Warsaw")
-  currency     String        @default("PLN")
+  timeZone     String        @default("Europe/Minsk")
+  currency     String        @default("BYN")
   lang         String        @default("ru")
   /// Рабочие интервалы по дням недели: { "1": [{ "from": "09:00", "to": "19:00" }], ... }
   workHours    Json          @default("{}")
