@@ -1,0 +1,151 @@
+// Серверная копия данных мастера. Повторяет типы из @zapis/core.
+// id создаются на телефоне (UUID), поэтому сервер их не генерирует.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Master {
+  id           String        @id
+  name         String
+  phone        String?
+  telegramId   BigInt?       @unique
+  timeZone     String        @default("Europe/Warsaw")
+  currency     String        @default("PLN")
+  lang         String        @default("ru")
+  /// Рабочие интервалы по дням недели: { "1": [{ "from": "09:00", "to": "19:00" }], ... }
+  workHours    Json          @default("{}")
+  createdAt    DateTime      @default(now())
+  services     Service[]
+  clients      Client[]
+  appointments Appointment[]
+  reminders    Reminder[]
+  devices      Device[]
+}
+
+model Service {
+  id             String        @id
+  masterId       String
+  master         Master        @relation(fields: [masterId], references: [id])
+  name           String
+  durationMinMin Int
+  durationMaxMin Int
+  bufferAfterMin Int           @default(0)
+  priceMin       Int
+  priceMax       Int
+  isConsultation Boolean       @default(false)
+  updatedAt      BigInt
+  deleted        Boolean       @default(false)
+  appointments   Appointment[]
+
+  @@index([masterId, updatedAt])
+}
+
+enum ReminderChannel {
+  telegram
+  viber
+  sms
+  whatsapp
+  none
+}
+
+model Client {
+  id              String          @id
+  masterId        String
+  master          Master          @relation(fields: [masterId], references: [id])
+  name            String
+  phone           String?
+  reminderChannel ReminderChannel @default(none)
+  notes           String?
+  source          String?
+  updatedAt       BigInt
+  deleted         Boolean         @default(false)
+  appointments    Appointment[]
+
+  @@index([masterId, updatedAt])
+  @@index([masterId, phone])
+}
+
+enum AppointmentStatus {
+  scheduled
+  done
+  cancelled
+  no_show
+}
+
+model Appointment {
+  id             String            @id
+  masterId       String
+  master         Master            @relation(fields: [masterId], references: [id])
+  clientId       String
+  client         Client            @relation(fields: [clientId], references: [id])
+  serviceId      String
+  service        Service           @relation(fields: [serviceId], references: [id])
+  start          BigInt
+  end            BigInt
+  bufferAfterMin Int               @default(0)
+  price          Int
+  status         AppointmentStatus @default(scheduled)
+  parallel       Boolean           @default(false)
+  note           String?
+  updatedAt      BigInt
+  deleted        Boolean           @default(false)
+  reminders      Reminder[]
+
+  @@index([masterId, start])
+  @@index([masterId, updatedAt])
+}
+
+enum ReminderKind {
+  master_daily_summary
+  client_day_before
+  client_delay
+}
+
+enum ReminderStatus {
+  pending
+  sent
+  failed
+  manual // текст подготовлен, мастер отправляет сам (Viber, SMS)
+}
+
+model Reminder {
+  id            String          @id @default(uuid())
+  masterId      String
+  master        Master          @relation(fields: [masterId], references: [id])
+  appointmentId String?
+  appointment   Appointment?    @relation(fields: [appointmentId], references: [id])
+  kind          ReminderKind
+  channel       ReminderChannel
+  sendAt        DateTime
+  status        ReminderStatus  @default(pending)
+  text          String?
+  sentAt        DateTime?
+
+  @@index([status, sendAt])
+}
+
+/// Затёртые при синхронизации версии — чтобы ничего не терялось безвозвратно.
+model History {
+  id         String   @id @default(uuid())
+  masterId   String
+  entity     String
+  entityId   String
+  payload    Json
+  replacedAt DateTime @default(now())
+
+  @@index([masterId, entity, entityId])
+}
+
+model Device {
+  id         String   @id
+  masterId   String
+  master     Master   @relation(fields: [masterId], references: [id])
+  lastSyncAt BigInt   @default(0)
+  createdAt  DateTime @default(now())
+}

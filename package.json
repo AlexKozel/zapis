@@ -1,0 +1,14 @@
+{
+  "name": "zapis",
+  "private": true,
+  "description": "Запись клиентов для мастеров: офлайн-календарь, база клиентов, напоминания",
+  "workspaces": [
+    "packages/core",
+    "packages/server",
+    "packages/app"
+  ],
+  "scripts": {
+    "test": "npm run test -w packages/core",
+    "typecheck": "npm run typecheck -w packages/core"
+  }
+}
