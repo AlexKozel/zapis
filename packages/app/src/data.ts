@@ -6,7 +6,14 @@ import { addDays, dayBounds, isoWeekday, type DayKey } from "./time.ts";
 /** Хуки чтения из локальной базы. useLiveQuery перерисовывает экран при любом изменении данных. */
 
 export function useSettings(): Settings {
-  return useLiveQuery(() => db.settings.get("main"), []) ?? DEFAULT_SETTINGS;
+  const stored = useLiveQuery(() => db.settings.get("main"), []);
+  // Поля, добавленные в новых версиях, берём из значений по умолчанию.
+  return { ...DEFAULT_SETTINGS, ...stored };
+}
+
+export async function saveSettings(patch: Partial<Omit<Settings, "key">>) {
+  const current = await db.settings.get("main");
+  await db.settings.put({ ...DEFAULT_SETTINGS, ...current, ...patch });
 }
 
 export function workRangesFor(settings: Settings, date: DayKey): WorkRange[] {
@@ -40,6 +47,15 @@ export function appointmentsInDays(from: DayKey, days: number): Promise<Appointm
     .between(start - 24 * 3_600_000, end, true, false)
     .filter((a) => !a.deleted && a.end > start)
     .sortBy("start");
+}
+
+/** Все записи клиента, новые сверху. */
+export function useClientAppointments(clientId: string): Appointment[] | undefined {
+  return useLiveQuery(
+    async () =>
+      (await db.appointments.where("clientId").equals(clientId).filter((a) => !a.deleted).sortBy("start")).reverse(),
+    [clientId],
+  );
 }
 
 export function useAppointments(from: DayKey, days = 1): Appointment[] | undefined {

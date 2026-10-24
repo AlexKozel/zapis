@@ -48,6 +48,7 @@ model Service {
 
 enum ReminderChannel {
   telegram
+  instagram
   viber
   sms
   whatsapp
@@ -60,6 +61,8 @@ model Client {
   master          Master          @relation(fields: [masterId], references: [id])
   name            String
   phone           String?
+  telegram        String?
+  instagram       String?
   reminderChannel ReminderChannel @default(none)
   notes           String?
   source          String?

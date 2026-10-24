@@ -1,4 +1,5 @@
 import { MINUTE, parseHm } from "@zapis/core";
+import { locale, t } from "./i18n/index.ts";
 
 /**
  * Работа с местным временем устройства. День задаётся строкой "YYYY-MM-DD".
@@ -61,8 +62,8 @@ export function atTime(key: DayKey, hm: string): number {
 }
 
 /** Минуты от опорной полуночи — для раскладки по сетке дня. */
-export function minutesInDay(key: DayKey, t: number): number {
-  return Math.round((t - anchor(key)) / MINUTE);
+export function minutesInDay(key: DayKey, ms: number): number {
+  return Math.round((ms - anchor(key)) / MINUTE);
 }
 
 /** Минуты от начала дня → "HH:MM". */
@@ -70,27 +71,31 @@ export function hm(minutes: number): string {
   return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 }
 
-const timeFmt = new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" });
-const dayFmt = new Intl.DateTimeFormat("ru-RU", { weekday: "long", day: "numeric", month: "long" });
-const shortDayFmt = new Intl.DateTimeFormat("ru-RU", { weekday: "short", day: "numeric", month: "short" });
+// Форматы зависят от языка интерфейса; Intl-объекты дорогие, поэтому кешируем по локали.
+const formatters = new Map<string, Intl.DateTimeFormat>();
+function dateFmt(name: string, opts: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const key = `${locale}|${name}`;
+  let f = formatters.get(key);
+  if (!f) formatters.set(key, (f = new Intl.DateTimeFormat(locale, opts)));
+  return f;
+}
+const noon = (key: DayKey) => anchor(key) + 12 * HOUR;
 
-export const fmtTime = (t: number) => timeFmt.format(t);
-export const fmtDay = (key: DayKey) => dayFmt.format(anchor(key) + 12 * HOUR);
-const weekdayFmt = new Intl.DateTimeFormat("ru-RU", { weekday: "short" });
-
-export const fmtShortDay = (key: DayKey) => shortDayFmt.format(anchor(key) + 12 * HOUR);
-export const fmtWeekday = (key: DayKey) => weekdayFmt.format(anchor(key) + 12 * HOUR);
+export const fmtTime = (ms: number) => dateFmt("time", { hour: "2-digit", minute: "2-digit" }).format(ms);
+export const fmtDay = (key: DayKey) => dateFmt("day", { weekday: "long", day: "numeric", month: "long" }).format(noon(key));
+export const fmtShortDay = (key: DayKey) =>
+  dateFmt("shortDay", { weekday: "short", day: "numeric", month: "short" }).format(noon(key));
+export const fmtDate = (ms: number) => dateFmt("date", { day: "numeric", month: "short", year: "numeric" }).format(ms);
+export const fmtWeekday = (key: DayKey) => dateFmt("weekday", { weekday: "short" }).format(noon(key));
+export const fmtWeekdayLong = (key: DayKey) => dateFmt("weekdayLong", { weekday: "long" }).format(noon(key));
 export const dayOfMonth = (key: DayKey) => Number(key.slice(8));
 
 export function fmtDuration(min: number): string {
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  if (h === 0) return `${m} мин`;
-  return m === 0 ? `${h} ч` : `${h} ч ${m} мин`;
+  return t.duration(Math.floor(min / 60), min % 60);
 }
 
 export function fmtMoney(amount: number, currency: string): string {
-  return new Intl.NumberFormat("ru-RU", {
+  return new Intl.NumberFormat(locale, {
     style: "currency",
     currency,
     maximumFractionDigits: amount % 100 === 0 ? 0 : 2,

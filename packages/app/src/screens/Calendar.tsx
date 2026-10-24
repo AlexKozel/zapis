@@ -2,7 +2,10 @@ import { useEffect, useState } from "react";
 import { MINUTE, freeWindows, isActive, occupied, parseHm, type Appointment, type AppointmentStatus } from "@zapis/core";
 import { db, saveRow } from "../db.ts";
 import { byId, useAppointments, useClients, useServices, useSettings, workRangesFor } from "../data.ts";
+import { t } from "../i18n/index.ts";
 import { go } from "../router.ts";
+import { TopBar } from "../ui.tsx";
+import { ContactLinks } from "./Clients.tsx";
 import {
   addDays,
   anchor,
@@ -32,35 +35,38 @@ export function CalendarScreen(props: { view: "day" | "week"; date: DayKey; save
 
   return (
     <div className="screen">
-      <header className="topbar">
-        <div className="topbar-row">
-          <button className="icon-btn" aria-label="Назад" onClick={() => go({ screen: view, date: addDays(date, -step) })}>
+      <TopBar
+        title={title}
+        left={
+          <button className="icon-btn" aria-label={t.common.back} onClick={() => go({ screen: view, date: addDays(date, -step) })}>
             ‹
           </button>
-          <h1 className="topbar-title">{title}</h1>
-          <button className="icon-btn" aria-label="Вперёд" onClick={() => go({ screen: view, date: addDays(date, step) })}>
+        }
+        right={
+          <button className="icon-btn" aria-label={t.common.forward} onClick={() => go({ screen: view, date: addDays(date, step) })}>
             ›
           </button>
-        </div>
+        }
+      >
         <div className="topbar-row">
           <div className="segmented" role="tablist">
             <button role="tab" aria-selected={view === "day"} onClick={() => go({ screen: "day", date })}>
-              День
+              {t.calendar.day}
             </button>
             <button role="tab" aria-selected={view === "week"} onClick={() => go({ screen: "week", date })}>
-              Неделя
+              {t.calendar.week}
             </button>
           </div>
           <button className="link-btn" onClick={() => go({ screen: view, date: todayKey() })}>
-            Сегодня
+            {t.calendar.today}
           </button>
         </div>
-      </header>
+      </TopBar>
 
       {view === "day" ? <DayView date={date} highlight={props.saved} /> : <WeekView date={date} />}
 
       <button className="fab" onClick={() => go({ screen: "new", date })}>
-        + Запись
+        {t.calendar.add}
       </button>
       {props.saved && <SavedToast id={props.saved} date={date} />}
     </div>
@@ -70,8 +76,8 @@ export function CalendarScreen(props: { view: "day" | "week"; date: DayKey; save
 function useNow(): number {
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), MINUTE);
-    return () => clearInterval(t);
+    const timer = setInterval(() => setNow(Date.now()), MINUTE);
+    return () => clearInterval(timer);
   }, []);
   return now;
 }
@@ -139,7 +145,7 @@ function DayView({ date, highlight }: { date: DayKey; highlight?: string }) {
 
   return (
     <main className="content">
-      {ranges.length === 0 && <p className="hint">Выходной. Записать всё равно можно — нажмите на время.</p>}
+      {ranges.length === 0 && <p className="hint">{t.calendar.dayOff}</p>}
       <div className="day-grid">
         <div className="hours" style={{ height: y(to) }}>
           {Array.from({ length: (to - from) / 60 + 1 }, (_, i) => (
@@ -164,7 +170,7 @@ function DayView({ date, highlight }: { date: DayKey; highlight?: string }) {
             const e = minutesInDay(date, w.end);
             return (
               <div key={w.start} className="free-window" style={{ top: y(s), height: (e - s) * PX_PER_MIN }}>
-                <span>свободно {fmtDuration(e - s)}</span>
+                <span>{t.calendar.free(fmtDuration(e - s))}</span>
               </div>
             );
           })}
@@ -193,9 +199,9 @@ function DayView({ date, highlight }: { date: DayKey; highlight?: string }) {
               >
                 <span className="appt-time">
                   {fmtTime(a.start)}–{fmtTime(a.end)}
-                  {a.parallel && <span className="badge" title="Поставлена параллельно">∥</span>}
+                  {a.parallel && <span className="badge" title={t.calendar.parallel}>∥</span>}
                 </span>
-                <span className="appt-client">{client?.name ?? "Клиент"}</span>
+                <span className="appt-client">{client?.name ?? t.calendar.client}</span>
                 {durMin >= 45 && <span className="appt-service">{service?.name}</span>}
                 {a.bufferAfterMin > 0 && (
                   <span className="appt-buffer" style={{ height: a.bufferAfterMin * PX_PER_MIN }} />
@@ -208,12 +214,12 @@ function DayView({ date, highlight }: { date: DayKey; highlight?: string }) {
 
       {inactive.length > 0 && (
         <section className="inactive">
-          <h2>Отмены и неявки</h2>
+          <h2>{t.calendar.inactive}</h2>
           {inactive.map((a) => (
             <button key={a.id} className="row" onClick={() => setOpened(a)}>
               <span>{fmtTime(a.start)}</span>
               <span className="grow">{clients.get(a.clientId)?.name}</span>
-              <span className="muted">{STATUS_LABEL[a.status]}</span>
+              <span className="muted">{t.status[a.status]}</span>
             </button>
           ))}
         </section>
@@ -270,10 +276,10 @@ function WeekView({ date }: { date: DayKey }) {
               <strong>{fmtShortDay(day)}</strong>
               <span className="muted">
                 {workMin === 0
-                  ? "выходной"
+                  ? t.calendar.weekDayOff
                   : busyMin === 0
-                    ? `свободно ${fmtDuration(workMin)}`
-                    : `занято ${fmtDuration(busyMin)} из ${fmtDuration(workMin)}`}
+                    ? t.calendar.free(fmtDuration(workMin))
+                    : t.calendar.busyOf(fmtDuration(busyMin), fmtDuration(workMin))}
               </span>
             </div>
             {workMin > 0 && (
@@ -289,7 +295,7 @@ function WeekView({ date }: { date: DayKey }) {
               ))}
               {list.length > 0 && free.map((w) => (
                 <span key={w.start} className="chip free">
-                  свободно {fmtTime(w.start)}–{fmtTime(w.end)}
+                  {t.calendar.freeRange(fmtTime(w.start), fmtTime(w.end))}
                 </span>
               ))}
             </div>
@@ -300,26 +306,21 @@ function WeekView({ date }: { date: DayKey }) {
   );
 }
 
-const STATUS_LABEL: Record<AppointmentStatus, string> = {
-  scheduled: "запланирована",
-  done: "пришла",
-  cancelled: "отменена",
-  no_show: "не пришла",
-};
-
 function AppointmentSheet({ appointment: a, onClose }: { appointment: Appointment; onClose: () => void }) {
   const clients = byId(useClients());
   const services = byId(useServices());
   const settings = useSettings();
   const client = clients.get(a.clientId);
   const service = services.get(a.serviceId);
+  // «Пришла» спрашивает фактическую сумму: у услуг «от–до» ожидаемая цена — только прикидка, а итоги считаются по факту.
+  const [amount, setAmount] = useState<string | null>(null);
 
-  async function setStatus(status: AppointmentStatus) {
-    await saveRow("appointments", { ...a, status });
+  async function setStatus(status: AppointmentStatus, price = a.price) {
+    await saveRow("appointments", { ...a, status, price });
     onClose();
   }
   async function remove() {
-    if (!confirm("Удалить запись? Её не будет ни в календаре, ни в истории клиента.")) return;
+    if (!confirm(t.sheet.deleteConfirm)) return;
     await saveRow("appointments", { ...a, deleted: true });
     onClose();
   }
@@ -327,35 +328,66 @@ function AppointmentSheet({ appointment: a, onClose }: { appointment: Appointmen
   return (
     <div className="sheet-backdrop" onClick={onClose}>
       <div className="sheet" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-        <h2>{client?.name ?? "Клиент"}</h2>
-        {client?.phone && (
-          <a className="phone" href={`tel:${client.phone}`}>
-            {client.phone}
-          </a>
-        )}
+        <h2>{client?.name ?? t.calendar.client}</h2>
+        {client && <ContactLinks client={client} />}
         <p>
           {service?.name} · {fmtTime(a.start)}–{fmtTime(a.end)}
-          {a.bufferAfterMin > 0 && <span className="muted"> (+{a.bufferAfterMin} мин запас)</span>}
+          {a.bufferAfterMin > 0 && <span className="muted"> ({t.sheet.buffer(a.bufferAfterMin)})</span>}
         </p>
         <p>
-          {fmtMoney(a.price, settings.currency)} · <span className="muted">{STATUS_LABEL[a.status]}</span>
-          {a.parallel && <span className="muted"> · параллельно</span>}
+          {fmtMoney(a.price, settings.currency)} · <span className="muted">{t.status[a.status]}</span>
+          {a.parallel && <span className="muted"> · {t.sheet.parallel}</span>}
         </p>
         {a.note && <p className="note">{a.note}</p>}
 
-        <div className="actions">
-          {a.status === "scheduled" ? (
-            <>
-              <button className="btn primary" onClick={() => setStatus("done")}>Пришла</button>
-              <button className="btn" onClick={() => go({ screen: "edit", id: a.id })}>Перенести / изменить</button>
-              <button className="btn" onClick={() => setStatus("no_show")}>Не пришла</button>
-              <button className="btn" onClick={() => setStatus("cancelled")}>Отменить</button>
-            </>
-          ) : (
-            <button className="btn" onClick={() => setStatus("scheduled")}>Вернуть в план</button>
-          )}
-          <button className="btn danger" onClick={remove}>Удалить</button>
-        </div>
+        {amount !== null ? (
+          <form
+            className="pay"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void setStatus("done", Math.round((Number(amount.replace(",", ".")) || 0) * 100));
+            }}
+          >
+            <label>
+              {t.sheet.amount(settings.currency)}
+              <input type="text" inputMode="decimal" autoFocus value={amount} onChange={(e) => setAmount(e.target.value)} />
+            </label>
+            <button className="btn primary" type="submit">
+              {t.common.done}
+            </button>
+          </form>
+        ) : (
+          <div className="actions">
+            {a.status === "scheduled" ? (
+              <>
+                <button className="btn primary" onClick={() => setAmount(String(a.price / 100))}>
+                  {t.sheet.came}
+                </button>
+                <button className="btn" onClick={() => go({ screen: "edit", id: a.id })}>
+                  {t.sheet.reschedule}
+                </button>
+                <button className="btn" onClick={() => setStatus("no_show")}>
+                  {t.sheet.noShow}
+                </button>
+                <button className="btn" onClick={() => setStatus("cancelled")}>
+                  {t.sheet.cancel}
+                </button>
+              </>
+            ) : (
+              <button className="btn" onClick={() => setStatus("scheduled")}>
+                {t.sheet.restore}
+              </button>
+            )}
+            {client && (
+              <button className="btn" onClick={() => go({ screen: "client", id: client.id })}>
+                {t.sheet.openClient}
+              </button>
+            )}
+            <button className="btn danger" onClick={remove}>
+              {t.common.delete}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -364,8 +396,8 @@ function AppointmentSheet({ appointment: a, onClose }: { appointment: Appointmen
 /** После быстрой записи — подтверждение с возможностью отменить, если нажали не на то окно. */
 function SavedToast({ id, date }: { id: string; date: DayKey }) {
   useEffect(() => {
-    const t = setTimeout(() => go({ screen: "day", date }, { replace: true }), 6000);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => go({ screen: "day", date }, { replace: true }), 6000);
+    return () => clearTimeout(timer);
   }, [id, date]);
 
   async function undo() {
@@ -376,8 +408,10 @@ function SavedToast({ id, date }: { id: string; date: DayKey }) {
 
   return (
     <div className="toast" role="status">
-      <span>Записано</span>
-      <button className="link-btn" onClick={undo}>Отменить</button>
+      <span>{t.calendar.saved}</span>
+      <button className="link-btn" onClick={undo}>
+        {t.common.undo}
+      </button>
     </div>
   );
 }

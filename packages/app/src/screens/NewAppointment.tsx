@@ -4,6 +4,7 @@ import {
   MINUTE,
   checkBooking,
   freeSlots,
+  normalizePhone,
   type Appointment,
   type BookingCheck,
   type Client,
@@ -11,7 +12,9 @@ import {
 } from "@zapis/core";
 import { db, saveRow, uuid } from "../db.ts";
 import { appointmentsInDays, byId, useAppointments, useClients, useServices, useSettings, workRangesFor } from "../data.ts";
-import { go } from "../router.ts";
+import { t } from "../i18n/index.ts";
+import { back, go } from "../router.ts";
+import { CloseButton, TopBar } from "../ui.tsx";
 import {
   addDays,
   anchor,
@@ -65,7 +68,7 @@ function durationOptions(s: Service): number[] {
 export function EditAppointmentScreen({ id }: { id: string }) {
   const base = useLiveQuery(() => db.appointments.get(id), [id], null);
   if (base === null) return null;
-  if (!base || base.deleted) return <p className="hint">Запись не найдена.</p>;
+  if (!base || base.deleted) return <p className="hint">{t.form.notFound}</p>;
   const date = dayKey(base.start);
   return (
     <AppointmentForm
@@ -84,8 +87,8 @@ export function EditAppointmentScreen({ id }: { id: string }) {
   );
 }
 
-export function NewAppointmentScreen({ date, time }: { date: DayKey; time?: string }) {
-  return <AppointmentForm initial={{ date, time, note: "" }} />;
+export function NewAppointmentScreen({ date, time, client }: { date: DayKey; time?: string; client?: string }) {
+  return <AppointmentForm initial={{ date, time, clientId: client, note: "" }} />;
 }
 
 function AppointmentForm({ initial, base }: { initial: Draft; base?: Appointment }) {
@@ -128,7 +131,8 @@ function AppointmentForm({ initial, base }: { initial: Draft; base?: Appointment
       await db.transaction("rw", db.clients, db.appointments, db.outbox, async () => {
         let clientId = draft.clientId;
         if (!clientId && draft.newClient) {
-          const phone = draft.newClient.phone.trim();
+          const raw = draft.newClient.phone.trim();
+          const phone = raw && (normalizePhone(raw, settings.country) ?? raw);
           const client = await saveRow("clients", {
             id: uuid(),
             name: draft.newClient.name.trim(),
@@ -162,28 +166,23 @@ function AppointmentForm({ initial, base }: { initial: Draft; base?: Appointment
    * Три нажатия: клиент → услуга → окно. Для услуги с фиксированными длительностью и ценой нажатие на окно
    * сразу сохраняет запись; для гибкой — только выбирает время, сохранение кнопкой «Записать».
    */
-  function pickSlot(t: number) {
-    update({ time: hm(minutesInDay(draft.date, t)) });
-    if (hasClient && service && !isFlexible(service)) void save(t, false);
+  function pickSlot(at: number) {
+    update({ time: hm(minutesInDay(draft.date, at)) });
+    if (hasClient && service && !isFlexible(service)) void save(at, false);
   }
 
   return (
     <div className="screen">
-      <header className="topbar">
-        <div className="topbar-row">
-          <button className="icon-btn" aria-label="Закрыть" onClick={() => history.back()}>
-            ✕
-          </button>
-          <h1 className="topbar-title">{base ? "Изменить запись" : "Новая запись"}</h1>
-          <span className="icon-btn" />
-        </div>
-      </header>
+      <TopBar
+        title={base ? t.form.titleEdit : t.form.titleNew}
+        left={<CloseButton onClick={() => back({ screen: "day", date: draft.date })} />}
+      />
 
       <main className="content form">
         <ClientStep draft={draft} update={update} autoFocus={!base} />
 
         <section className="step">
-          <h2>Услуга</h2>
+          <h2>{t.form.service}</h2>
           {service && (
             <div className="picked">
               <span>
@@ -193,14 +192,14 @@ function AppointmentForm({ initial, base }: { initial: Draft; base?: Appointment
                 </span>
               </span>
               <button className="link-btn" onClick={() => update({ serviceId: undefined })}>
-                Изменить
+                {t.common.edit}
               </button>
             </div>
           )}
           {service && isFlexible(service) && (
             <div className="tune">
               {service.durationMinMin !== service.durationMaxMin && (
-                <div className="tune-row" role="group" aria-label="Длительность">
+                <div className="tune-row" role="group" aria-label={t.form.durationMin}>
                   {durationOptions(service).map((m) => (
                     <button key={m} className="tune-chip" aria-pressed={durationMin === m} onClick={() => update({ durationMin: m })}>
                       {fmtDuration(m)}
@@ -210,7 +209,7 @@ function AppointmentForm({ initial, base }: { initial: Draft; base?: Appointment
               )}
               {service.priceMin !== service.priceMax && (
                 <label className="tune-price">
-                  Цена, {settings.currency}
+                  {t.form.price(settings.currency)}
                   <input
                     type="number"
                     inputMode="decimal"
@@ -257,12 +256,12 @@ function AppointmentForm({ initial, base }: { initial: Draft; base?: Appointment
 
         <section className="step">
           <button className="link-btn" onClick={() => setShowDetails((v) => !v)}>
-            {showDetails ? "Скрыть подробности" : "Длительность, запас, цена, заметка"}
+            {showDetails ? t.form.detailsHide : t.form.detailsShow}
           </button>
           {showDetails && (
             <div className="details">
               <label>
-                Длительность, мин
+                {t.form.durationMin}
                 <input
                   type="number"
                   inputMode="numeric"
@@ -273,12 +272,12 @@ function AppointmentForm({ initial, base }: { initial: Draft; base?: Appointment
                 />
                 {service && service.durationMinMin !== service.durationMaxMin && (
                   <small className="muted">
-                    по услуге {fmtDuration(service.durationMinMin)} – {fmtDuration(service.durationMaxMin)}
+                    {t.form.byService(fmtDuration(service.durationMinMin), fmtDuration(service.durationMaxMin))}
                   </small>
                 )}
               </label>
               <label>
-                Запас после, мин
+                {t.form.bufferMin}
                 <input
                   type="number"
                   inputMode="numeric"
@@ -289,7 +288,7 @@ function AppointmentForm({ initial, base }: { initial: Draft; base?: Appointment
                 />
               </label>
               <label>
-                Цена, {settings.currency}
+                {t.form.price(settings.currency)}
                 <input
                   type="number"
                   inputMode="decimal"
@@ -299,7 +298,7 @@ function AppointmentForm({ initial, base }: { initial: Draft; base?: Appointment
                 />
               </label>
               <label className="wide">
-                Заметка
+                {t.form.note}
                 <textarea rows={2} value={draft.note} onChange={(e) => update({ note: e.target.value })} />
               </label>
             </div>
@@ -315,7 +314,7 @@ function AppointmentForm({ initial, base }: { initial: Draft; base?: Appointment
             {fmtShortDay(draft.date)}, {fmtTime(start)}–{fmtTime(start + durationMin * MINUTE)}
           </span>
           <button className="btn primary" disabled={saving} onClick={() => save(start, false)}>
-            {base ? "Сохранить" : "Записать"}
+            {base ? t.common.save : t.form.book}
           </button>
         </footer>
       )}
@@ -346,13 +345,13 @@ function ClientStep({ draft, update, autoFocus }: { draft: Draft; update: (p: Pa
   if (picked) {
     return (
       <section className="step">
-        <h2>Клиент</h2>
+        <h2>{t.form.client}</h2>
         <div className="picked">
           <span>
             <strong>{picked.name}</strong> {picked.phone && <span className="muted">{picked.phone}</span>}
           </span>
           <button className="link-btn" onClick={() => update({ clientId: undefined })}>
-            Изменить
+            {t.common.edit}
           </button>
         </div>
       </section>
@@ -363,14 +362,14 @@ function ClientStep({ draft, update, autoFocus }: { draft: Draft; update: (p: Pa
     const nc = draft.newClient;
     return (
       <section className="step">
-        <h2>Новый клиент</h2>
+        <h2>{t.form.newClient}</h2>
         <div className="details">
           <label>
-            Имя
+            {t.form.name}
             <input value={nc.name} onChange={(e) => update({ newClient: { ...nc, name: e.target.value } })} />
           </label>
           <label>
-            Телефон <small className="muted">необязательно</small>
+            {t.form.phone} <small className="muted">{t.common.optional}</small>
             <input
               type="tel"
               inputMode="tel"
@@ -380,7 +379,7 @@ function ClientStep({ draft, update, autoFocus }: { draft: Draft; update: (p: Pa
           </label>
         </div>
         <button className="link-btn" onClick={() => update({ newClient: undefined })}>
-          Выбрать из базы
+          {t.form.fromBase}
         </button>
       </section>
     );
@@ -388,11 +387,11 @@ function ClientStep({ draft, update, autoFocus }: { draft: Draft; update: (p: Pa
 
   return (
     <section className="step">
-      <h2>Клиент</h2>
+      <h2>{t.form.client}</h2>
       <input
         className="search"
         type="search"
-        placeholder="Имя или телефон"
+        placeholder={t.form.searchPlaceholder}
         autoFocus={autoFocus}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
@@ -413,11 +412,11 @@ function ClientStep({ draft, update, autoFocus }: { draft: Draft; update: (p: Pa
               update({ newClient: isPhone ? { name: "", phone: q } : { name: q, phone: "" } });
             }}
           >
-            <strong>+ Новый клиент</strong>
+            <strong>{t.form.addClient}</strong>
             <span className="muted">«{query.trim()}»</span>
           </button>
         )}
-        {!query.trim() && matches.length === 0 && <p className="hint">Начните вводить имя — появится кнопка «Новый клиент».</p>}
+        {!query.trim() && matches.length === 0 && <p className="hint">{t.form.searchHint}</p>}
       </div>
     </section>
   );
@@ -453,7 +452,7 @@ function TimeStep(props: {
 
   return (
     <section className="step">
-      <h2>Время</h2>
+      <h2>{t.form.time}</h2>
       <div className="date-strip">
         {Array.from({ length: DATE_STRIP_DAYS }, (_, i) => {
           const d = addDays(stripStart, i);
@@ -468,11 +467,11 @@ function TimeStep(props: {
       <p className="muted">{fmtDay(draft.date)}</p>
 
       {durationMin === undefined ? (
-        <p className="hint">Выберите услугу — покажу свободные окна.</p>
+        <p className="hint">{t.form.pickServiceHint}</p>
       ) : ranges.length === 0 ? (
-        <p className="hint">Выходной. Можно указать время вручную.</p>
+        <p className="hint">{t.form.dayOff}</p>
       ) : slots.length === 0 ? (
-        <p className="hint">Свободных окон на {fmtDuration(durationMin)} нет. Выберите другой день или время вручную.</p>
+        <p className="hint">{t.form.noSlots(fmtDuration(durationMin))}</p>
       ) : (
         <div className="slots">
           {slots.map((t) => {
@@ -487,7 +486,7 @@ function TimeStep(props: {
       )}
 
       <label className="manual-time">
-        Своё время
+        {t.form.manualTime}
         <input
           type="time"
           step={SLOT_STEP_MIN * 60}
@@ -504,25 +503,31 @@ function ProblemPanel({ problem, onParallel, onClose }: { problem: Problem; onPa
   if (problem.reason === "invalid_time") {
     return (
       <footer className="savebar problem">
-        <span>Запись должна заканчиваться позже, чем начинается.</span>
-        <button className="btn" onClick={onClose}>Понятно</button>
+        <span>{t.form.invalidTime}</span>
+        <button className="btn" onClick={onClose}>
+          {t.form.ok}
+        </button>
       </footer>
     );
   }
   return (
     <footer className="savebar problem">
       <div>
-        <strong>Накладка</strong>
+        <strong>{t.form.conflict}</strong>
         {problem.conflicts.map((c) => (
           <div key={c.id} className="muted">
             {fmtTime(c.start)}–{fmtTime(c.end)}
-            {c.bufferAfterMin > 0 && ` (+${c.bufferAfterMin} мин)`} · {clients.get(c.clientId)?.name}
+            {c.bufferAfterMin > 0 && ` (+${c.bufferAfterMin} ${t.common.min})`} · {clients.get(c.clientId)?.name}
           </div>
         ))}
       </div>
       <div className="actions">
-        <button className="btn primary" onClick={onClose}>Другое время</button>
-        <button className="btn" onClick={onParallel}>Поставить параллельно</button>
+        <button className="btn primary" onClick={onClose}>
+          {t.form.otherTime}
+        </button>
+        <button className="btn" onClick={onParallel}>
+          {t.form.parallel}
+        </button>
       </div>
     </footer>
   );

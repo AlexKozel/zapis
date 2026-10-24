@@ -1,5 +1,6 @@
 import Dexie, { type EntityTable, type Transaction } from "dexie";
-import type { Appointment, Client, Service, WorkRange } from "@zapis/core";
+import type { Appointment, Client, Country, Service, WorkRange } from "@zapis/core";
+import type { UiLang } from "./i18n/index.ts";
 
 /**
  * Локальная база телефона — главная копия данных мастера.
@@ -26,6 +27,10 @@ export interface Settings {
   /** Рабочие интервалы по дням недели, "1" — понедельник. Как Master.workHours на сервере. */
   workHours: Record<string, WorkRange[]>;
   currency: string;
+  lang: UiLang;
+  country: Country;
+  /** Когда мастер последний раз сохранял резервную копию (до синхронизации это единственная страховка). */
+  lastBackupAt?: number;
 }
 
 class ZapisDb extends Dexie {
@@ -75,13 +80,29 @@ export async function saveRow<K extends SyncTable>(
   return saved;
 }
 
+/**
+ * Записать готовые строки как есть (их updatedAt не меняется) — для импорта и восстановления из копии.
+ * Тоже ставит их в очередь, чтобы при синхронизации они попали на сервер.
+ */
+export async function putRows<K extends SyncTable>(table: K, rows: Rows[K][]): Promise<void> {
+  await db.transaction("rw", db.table(table), db.outbox, async () => {
+    await db.table(table).bulkPut(rows);
+    await db.outbox.bulkPut(rows.map((r) => ({ key: `${table}:${r.id}`, table, id: r.id, updatedAt: r.updatedAt })));
+  });
+}
+
 export const DEFAULT_SETTINGS: Settings = {
   key: "main",
   workHours: Object.fromEntries(
     ["1", "2", "3", "4", "5", "6"].map((d) => [d, [{ from: "09:00", to: "19:00" }]]),
   ),
   currency: "BYN",
+  lang: "ru",
+  country: "BY",
 };
+
+/** Валюта страны: при смене страны в настройках меняется вместе с ней. Язык выбирается отдельно. */
+export const CURRENCY: Record<Country, string> = { BY: "BYN", PL: "PLN" };
 
 /** Стартовые услуги (цены в BYN — примерные), чтобы мастер мог сразу записывать. Редактирование — экран «Услуги» (неделя 2). */
 function seed(tx: Transaction) {

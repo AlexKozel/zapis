@@ -28,11 +28,16 @@ export interface Service extends Syncable {
   isConsultation?: boolean;
 }
 
-export type ReminderChannel = "telegram" | "viber" | "sms" | "whatsapp" | "none";
+export type ReminderChannel = "telegram" | "instagram" | "viber" | "sms" | "whatsapp" | "none";
 
 export interface Client extends Syncable {
   name: string;
+  /** В международном виде, +375291234567. */
   phone?: string;
+  /** Ник без @ (или телефон, если ника нет). */
+  telegram?: string;
+  /** Ник в Instagram без @. */
+  instagram?: string;
   reminderChannel: ReminderChannel;
   /** Например, формула окрашивания. */
   notes?: string;
@@ -56,6 +61,9 @@ export interface Appointment extends Syncable {
   parallel: boolean;
   note?: string;
 }
+
+/** Страна мастера: от неё зависит разбор телефонов без кода страны. */
+export type Country = "BY" | "PL";
 
 /** Рабочий интервал внутри дня в формате "HH:MM". */
 export interface WorkRange {

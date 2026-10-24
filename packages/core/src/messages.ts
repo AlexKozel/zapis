@@ -58,3 +58,15 @@ export function shareLink(channel: "viber" | "sms", phone: string, text: string)
   }
   return `sms:${digits}?body=${encodeURIComponent(text)}`;
 }
+
+/**
+ * Чат с клиентом в Telegram или Instagram. Готовый текст в чужой чат подставить нельзя,
+ * поэтому приложение копирует его в буфер обмена, а ссылка открывает переписку.
+ */
+export function chatLink(channel: "telegram" | "instagram", handle: string): string {
+  const h = handle.trim().replace(/^@/, "");
+  if (channel === "instagram") return `https://ig.me/m/${encodeURIComponent(h)}`;
+  // Без ника Telegram открывает чат по номеру, если клиент это разрешил в настройках приватности.
+  if (/^\+?\d{7,15}$/.test(h.replace(/[\s()-]/g, ""))) return `https://t.me/+${h.replace(/\D/g, "")}`;
+  return `https://t.me/${encodeURIComponent(h)}`;
+}
