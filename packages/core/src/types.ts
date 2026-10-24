@@ -26,6 +26,8 @@ export interface Service extends Syncable {
   priceMax: number;
   /** Консультация для новых клиентов — короткая отдельная услуга. */
   isConsultation?: boolean;
+  /** Номер цвета в палитре приложения, чтобы записи разных услуг различались в календаре. */
+  color?: number;
 }
 
 export type ReminderChannel = "telegram" | "instagram" | "viber" | "sms" | "whatsapp" | "none";

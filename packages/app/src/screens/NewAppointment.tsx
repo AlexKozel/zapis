@@ -14,7 +14,8 @@ import { db, saveRow, uuid } from "../db.ts";
 import { appointmentsInDays, byId, useAppointments, useClients, useServices, useSettings, workRangesFor } from "../data.ts";
 import { t } from "../i18n/index.ts";
 import { back, go } from "../router.ts";
-import { CloseButton, TopBar } from "../ui.tsx";
+import { CloseButton, serviceStyle, TopBar } from "../ui.tsx";
+import { canPickContacts, pickContact } from "../contacts.ts";
 import {
   addDays,
   anchor,
@@ -228,7 +229,10 @@ function AppointmentForm({ initial, base }: { initial: Draft; base?: Appointment
             <div className="options">
               {services?.map((s) => (
                 <button key={s.id} className={"option" + (s.isConsultation ? " consult" : "")} onClick={() => pickService(s)}>
-                  <strong>{s.name}</strong>
+                  <strong>
+                    <span className="swatch small" style={serviceStyle(s)} aria-hidden="true" />
+                    {s.name}
+                  </strong>
                   <span className="muted">
                     {s.durationMinMin === s.durationMaxMin
                       ? fmtDuration(s.durationMinMin)
@@ -325,6 +329,7 @@ function AppointmentForm({ initial, base }: { initial: Draft; base?: Appointment
 function ClientStep({ draft, update, autoFocus }: { draft: Draft; update: (p: Partial<Draft>) => void; autoFocus: boolean }) {
   const [query, setQuery] = useState("");
   const clients = useClients();
+  const settings = useSettings();
   const recentIds = useLiveQuery(async () => {
     const last = await db.appointments.orderBy("start").reverse().limit(300).toArray();
     return [...new Set(last.filter((a) => !a.deleted).map((a) => a.clientId))];
@@ -416,7 +421,22 @@ function ClientStep({ draft, update, autoFocus }: { draft: Draft; update: (p: Pa
             <span className="muted">«{query.trim()}»</span>
           </button>
         )}
-        {!query.trim() && matches.length === 0 && <p className="hint">{t.form.searchHint}</p>}
+        {canPickContacts && (
+          <button
+            className="option add"
+            onClick={async () => {
+              const c = await pickContact(settings.country);
+              if (!c) return;
+              // Уже есть в базе с этим телефоном — берём существующего, а не создаём дубль.
+              const digits = c.phone?.replace(/\D/g, "");
+              const known = digits ? clients?.find((x) => x.phone?.replace(/\D/g, "") === digits) : undefined;
+              update(known ? { clientId: known.id } : { newClient: { name: c.name, phone: c.phone ?? "" } });
+            }}
+          >
+            <strong>{t.form.pickContact}</strong>
+          </button>
+        )}
+        {!query.trim() && matches.length === 0 && !canPickContacts && <p className="hint">{t.form.searchHint}</p>}
       </div>
     </section>
   );

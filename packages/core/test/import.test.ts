@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import { expect } from "./expect.ts";
-import { clientsFromTable, clientsFromVcf, dedupeClients, normalizeHandle, normalizePhone, parseCsv } from "../src/import.ts";
+import { clientToVcf, clientsFromTable, clientsFromVcf, dedupeClients, normalizeHandle, normalizePhone, parseCsv } from "../src/import.ts";
 import { chatLink } from "../src/messages.ts";
 
 describe("normalizePhone", () => {
@@ -87,6 +87,18 @@ describe("clientsFromVcf", () => {
     expect(clientsFromVcf(vcf, "BY")).toEqual([
       { name: "Анна Иванова", phone: "+375291234567", notes: "формула 7.1, оксид 6%" },
       { name: "Ольга Петрова", phone: "+375447654321" },
+    ]);
+  });
+});
+
+describe("clientToVcf", () => {
+  it("собирает карточку контакта, которую читает телефон и наш же импорт", () => {
+    const vcf = clientToVcf({ name: "Анна Иванова", phone: "+375291234567", instagram: "anna_hair", notes: "7.1; оксид 6%\nчувствительная" });
+    expect(vcf).toContain("N:Иванова;Анна;;;");
+    expect(vcf).toContain("TEL;TYPE=CELL:+375291234567");
+    expect(vcf).toContain("X-SOCIALPROFILE;type=instagram:https://instagram.com/anna_hair");
+    expect(clientsFromVcf(vcf, "BY")).toEqual([
+      { name: "Анна Иванова", phone: "+375291234567", notes: "7.1; оксид 6%\nчувствительная" },
     ]);
   });
 });

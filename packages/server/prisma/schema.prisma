@@ -39,6 +39,7 @@ model Service {
   priceMin       Int
   priceMax       Int
   isConsultation Boolean       @default(false)
+  color          Int?
   updatedAt      BigInt
   deleted        Boolean       @default(false)
   appointments   Appointment[]

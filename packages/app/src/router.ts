@@ -3,12 +3,13 @@ import { todayKey, type DayKey } from "./time.ts";
 
 /**
  * Маршруты в hash, чтобы кнопка «назад» на телефоне работала и офлайн-PWA не нуждалась в настройке сервера.
- *   #/day/2026-10-26?saved=<id>   #/week/2026-10-26   #/new?date=2026-10-26&time=10:30&client=<id>   #/edit/<id>
+ *   #/day/2026-10-26?saved=<id>   #/week/2026-10-26   #/month/2026-10-26   #/new?date=2026-10-26&time=10:30&client=<id>   #/edit/<id>
  *   #/clients   #/client/<id|new>   #/import   #/services   #/service/<id|new>   #/settings
  */
 export type Route =
   | { screen: "day"; date: DayKey; saved?: string }
   | { screen: "week"; date: DayKey }
+  | { screen: "month"; date: DayKey }
   | { screen: "new"; date: DayKey; time?: string; client?: string }
   | { screen: "edit"; id: string }
   | { screen: "clients" }
@@ -29,7 +30,8 @@ export function parseRoute(hash: string): Route {
   const date = DATE.test(arg) ? arg : (q.get("date") ?? todayKey());
   switch (screen) {
     case "week":
-      return { screen: "week", date };
+    case "month":
+      return { screen, date };
     case "new":
       return {
         screen: "new",
@@ -60,7 +62,8 @@ export function href(route: Route): string {
     case "day":
       return `#/day/${route.date}` + (route.saved ? `?saved=${route.saved}` : "");
     case "week":
-      return `#/week/${route.date}`;
+    case "month":
+      return `#/${route.screen}/${route.date}`;
     case "new": {
       const q = new URLSearchParams({ date: route.date });
       if (route.time) q.set("time", route.time);
@@ -80,6 +83,7 @@ export function tabOf(route: Route): Tab | undefined {
   switch (route.screen) {
     case "day":
     case "week":
+    case "month":
       return "calendar";
     case "clients":
       return "clients";

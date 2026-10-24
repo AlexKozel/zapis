@@ -104,9 +104,10 @@ export const DEFAULT_SETTINGS: Settings = {
 /** Валюта страны: при смене страны в настройках меняется вместе с ней. Язык выбирается отдельно. */
 export const CURRENCY: Record<Country, string> = { BY: "BYN", PL: "PLN" };
 
-/** Стартовые услуги (цены в BYN — примерные), чтобы мастер мог сразу записывать. Редактирование — экран «Услуги» (неделя 2). */
+/** Стартовые услуги (цены в BYN — примерные), чтобы мастер мог сразу записывать; меняются на экране «Услуги». */
 function seed(tx: Transaction) {
   const now = Date.now();
+  let color = 0;
   const s = (
     name: string,
     durationMinMin: number,
@@ -116,6 +117,7 @@ function seed(tx: Transaction) {
     priceMax: number,
     isConsultation = false,
   ): Service => ({
+    color: color++,
     id: uuid(),
     updatedAt: now,
     name,

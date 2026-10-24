@@ -4,12 +4,20 @@ import { db, saveRow } from "../db.ts";
 import { byId, useAppointments, useClients, useServices, useSettings, workRangesFor } from "../data.ts";
 import { t } from "../i18n/index.ts";
 import { go } from "../router.ts";
-import { TopBar } from "../ui.tsx";
+import { Plus } from "lucide-react";
+import { ArrowButton, serviceStyle, TopBar } from "../ui.tsx";
 import { ContactLinks } from "./Clients.tsx";
 import {
   addDays,
+  addMonths,
   anchor,
   dayBounds,
+  dayDiff,
+  dayOfMonth,
+  fmtHours,
+  fmtMonth,
+  fmtWeekday,
+  monthStart,
   fmtDay,
   fmtDuration,
   fmtMoney,
@@ -26,27 +34,32 @@ const PX_PER_MIN = 1.2;
 const SNAP_MIN = 15;
 /** Окна короче не подсвечиваем: в них ничего, кроме консультации, не поставить. */
 const FREE_WINDOW_MIN = 30;
+/** Записи короче — в одну строку. */
+const COMPACT_MIN = 40;
 
-export function CalendarScreen(props: { view: "day" | "week"; date: DayKey; saved?: string }) {
+type View = "day" | "week" | "month";
+
+/** Соседний день, неделя или месяц — для стрелок в заголовке. */
+function shift(view: View, date: DayKey, dir: 1 | -1): DayKey {
+  if (view === "month") return addMonths(date, dir);
+  return addDays(date, view === "day" ? dir : 7 * dir);
+}
+
+export function CalendarScreen(props: { view: View; date: DayKey; saved?: string }) {
   const { view, date } = props;
-  const step = view === "day" ? 1 : 7;
   const title =
-    view === "day" ? fmtDay(date) : `${fmtShortDay(weekStart(date))} – ${fmtShortDay(addDays(weekStart(date), 6))}`;
+    view === "day"
+      ? fmtDay(date)
+      : view === "week"
+        ? `${fmtShortDay(weekStart(date))} – ${fmtShortDay(addDays(weekStart(date), 6))}`
+        : fmtMonth(date);
 
   return (
     <div className="screen">
       <TopBar
         title={title}
-        left={
-          <button className="icon-btn" aria-label={t.common.back} onClick={() => go({ screen: view, date: addDays(date, -step) })}>
-            ‹
-          </button>
-        }
-        right={
-          <button className="icon-btn" aria-label={t.common.forward} onClick={() => go({ screen: view, date: addDays(date, step) })}>
-            ›
-          </button>
-        }
+        left={<ArrowButton dir="back" onClick={() => go({ screen: view, date: shift(view, date, -1) })} />}
+        right={<ArrowButton dir="forward" onClick={() => go({ screen: view, date: shift(view, date, 1) })} />}
       >
         <div className="topbar-row">
           <div className="segmented" role="tablist">
@@ -56,6 +69,9 @@ export function CalendarScreen(props: { view: "day" | "week"; date: DayKey; save
             <button role="tab" aria-selected={view === "week"} onClick={() => go({ screen: "week", date })}>
               {t.calendar.week}
             </button>
+            <button role="tab" aria-selected={view === "month"} onClick={() => go({ screen: "month", date })}>
+              {t.calendar.month}
+            </button>
           </div>
           <button className="link-btn" onClick={() => go({ screen: view, date: todayKey() })}>
             {t.calendar.today}
@@ -63,9 +79,12 @@ export function CalendarScreen(props: { view: "day" | "week"; date: DayKey; save
         </div>
       </TopBar>
 
-      {view === "day" ? <DayView date={date} highlight={props.saved} /> : <WeekView date={date} />}
+      {view === "day" && <DayView date={date} highlight={props.saved} />}
+      {view === "week" && <WeekView date={date} />}
+      {view === "month" && <MonthView date={date} />}
 
       <button className="fab" onClick={() => go({ screen: "new", date })}>
+        <Plus size={20} strokeWidth={2.5} />
         {t.calendar.add}
       </button>
       {props.saved && <SavedToast id={props.saved} date={date} />}
@@ -185,8 +204,13 @@ function DayView({ date, highlight }: { date: DayKey; highlight?: string }) {
             return (
               <button
                 key={a.id}
-                className={`appt status-${a.status}` + (a.id === highlight ? " highlight" : "")}
+                className={
+                  `appt status-${a.status}` +
+                  (durMin < COMPACT_MIN ? " compact" : "") +
+                  (a.id === highlight ? " highlight" : "")
+                }
                 style={{
+                  ...serviceStyle(service),
                   top: y(startMin),
                   height: durMin * PX_PER_MIN,
                   left: `${(pos.lane / pos.lanes) * 100}%`,
@@ -197,12 +221,21 @@ function DayView({ date, highlight }: { date: DayKey; highlight?: string }) {
                   setOpened(a);
                 }}
               >
-                <span className="appt-time">
-                  {fmtTime(a.start)}–{fmtTime(a.end)}
-                  {a.parallel && <span className="badge" title={t.calendar.parallel}>∥</span>}
-                </span>
-                <span className="appt-client">{client?.name ?? t.calendar.client}</span>
-                {durMin >= 45 && <span className="appt-service">{service?.name}</span>}
+                {durMin < COMPACT_MIN ? (
+                  // Короткая запись (консультация) — в одну строку, иначе текст не помещается в блок.
+                  <span className="appt-client">
+                    <span className="appt-time">{fmtTime(a.start)}</span> {client?.name ?? t.calendar.client}
+                  </span>
+                ) : (
+                  <>
+                    <span className="appt-time">
+                      {fmtTime(a.start)}–{fmtTime(a.end)}
+                      {a.parallel && <span className="badge" title={t.calendar.parallel}>∥</span>}
+                    </span>
+                    <span className="appt-client">{client?.name ?? t.calendar.client}</span>
+                    {durMin >= 60 && <span className="appt-service">{service?.name}</span>}
+                  </>
+                )}
                 {a.bufferAfterMin > 0 && (
                   <span className="appt-buffer" style={{ height: a.bufferAfterMin * PX_PER_MIN }} />
                 )}
@@ -252,6 +285,7 @@ function WeekView({ date }: { date: DayKey }) {
   const settings = useSettings();
   const appointments = useAppointments(monday, 7);
   const clients = byId(useClients());
+  const services = byId(useServices());
   const today = todayKey();
   const now = useNow();
 
@@ -289,7 +323,7 @@ function WeekView({ date }: { date: DayKey }) {
             )}
             <div className="chips">
               {list.map((a) => (
-                <span key={a.id} className="chip">
+                <span key={a.id} className="chip appt-chip" style={serviceStyle(services.get(a.serviceId))}>
                   {fmtTime(a.start)} {clients.get(a.clientId)?.name}
                 </span>
               ))}
@@ -302,6 +336,61 @@ function WeekView({ date }: { date: DayKey }) {
           </button>
         );
       })}
+    </main>
+  );
+}
+
+/**
+ * Месяц: колористу нужно найти день под длинное окрашивание, поэтому в каждом дне — загрузка
+ * и самое длинное свободное окно, а не список записей.
+ */
+function MonthView({ date }: { date: DayKey }) {
+  const settings = useSettings();
+  const first = monthStart(date);
+  const gridStart = weekStart(first);
+  const weeks = Math.ceil(dayDiff(gridStart, addMonths(first, 1)) / 7);
+  const appointments = useAppointments(gridStart, weeks * 7);
+  const today = todayKey();
+  const now = useNow();
+
+  return (
+    <main className="content">
+      <div className="month">
+        {Array.from({ length: 7 }, (_, i) => (
+          <span key={i} className="month-wd">
+            {fmtWeekday(addDays(gridStart, i))}
+          </span>
+        ))}
+        {Array.from({ length: weeks * 7 }, (_, i) => {
+          const day = addDays(gridStart, i);
+          const { start, end } = dayBounds(day);
+          const ranges = workRangesFor(settings, day);
+          const list = (appointments ?? []).filter((a) => isActive(a) && a.start < end && a.end > start);
+          const workMin = ranges.reduce((s, r) => s + parseHm(r.to) - parseHm(r.from), 0);
+          const longest = freeWindows({ dayStart: anchor(day), workRanges: ranges, appointments: list, notBefore: now }).reduce(
+            (m, w) => Math.max(m, (w.end - w.start) / MINUTE),
+            0,
+          );
+          const classes = ["month-day"];
+          if (day.slice(0, 7) !== first.slice(0, 7)) classes.push("other");
+          if (day === today) classes.push("today");
+          if (workMin === 0) classes.push("off");
+          return (
+            <button key={day} className={classes.join(" ")} onClick={() => go({ screen: "day", date: day })}>
+              <span className="month-num">{dayOfMonth(day)}</span>
+              {workMin > 0 && (
+                <span className="meter">
+                  <span style={{ width: `${Math.min(100, (busyMinutes(list) / workMin) * 100)}%` }} />
+                </span>
+              )}
+              {list.length > 0 && <span className="month-count">{list.length}</span>}
+              {/* У пустого дня свободен весь день — это видно по пустой полоске, число только шумит. */}
+              {list.length > 0 && longest >= 60 && <span className="month-free">{fmtHours(longest)}</span>}
+            </button>
+          );
+        })}
+      </div>
+      <p className="hint small">{t.calendar.monthLegend}</p>
     </main>
   );
 }
@@ -328,6 +417,7 @@ function AppointmentSheet({ appointment: a, onClose }: { appointment: Appointmen
   return (
     <div className="sheet-backdrop" onClick={onClose}>
       <div className="sheet" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+        <span className="sheet-handle" aria-hidden="true" />
         <h2>{client?.name ?? t.calendar.client}</h2>
         {client && <ContactLinks client={client} />}
         <p>

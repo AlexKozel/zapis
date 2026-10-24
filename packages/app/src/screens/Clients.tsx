@@ -13,7 +13,9 @@ import { byId, useClientAppointments, useClients, useServices, useSettings } fro
 import { t } from "../i18n/index.ts";
 import { back, go } from "../router.ts";
 import { fmtDate, fmtMoney, fmtShortDay, fmtTime, dayKey, todayKey } from "../time.ts";
-import { CloseButton, TopBar } from "../ui.tsx";
+import { BookUser, ChevronRight, Contact, Instagram, Phone, Send } from "lucide-react";
+import { canPickContacts, pickContact, saveToPhoneContacts } from "../contacts.ts";
+import { Avatar, CloseButton, TopBar } from "../ui.tsx";
 
 const CHANNELS: ReminderChannel[] = ["telegram", "instagram", "viber", "sms", "whatsapp", "none"];
 
@@ -22,14 +24,21 @@ export function ContactLinks({ client }: { client: Client }) {
   if (!client.phone && !client.telegram && !client.instagram) return null;
   return (
     <div className="contacts">
-      {client.phone && <a href={`tel:${client.phone}`}>{client.phone}</a>}
+      {client.phone && (
+        <a href={`tel:${client.phone}`}>
+          <Phone size={16} />
+          {client.phone}
+        </a>
+      )}
       {client.telegram && (
         <a href={chatLink("telegram", client.telegram)} target="_blank" rel="noreferrer">
+          <Send size={16} />
           Telegram
         </a>
       )}
       {client.instagram && (
         <a href={chatLink("instagram", client.instagram)} target="_blank" rel="noreferrer">
+          <Instagram size={16} />
           Instagram
         </a>
       )}
@@ -68,7 +77,7 @@ export function ClientsScreen() {
 
   return (
     <div className="screen">
-      <TopBar title={t.clients.title} />
+      <TopBar title={t.clients.title} large />
       <main className="content">
         <div className="toolbar">
           <button className="btn primary" onClick={() => go({ screen: "client", id: "new" })}>
@@ -95,12 +104,16 @@ export function ClientsScreen() {
                 const last = lastVisit?.get(c.id);
                 return (
                   <button key={c.id} className="list-row" onClick={() => go({ screen: "client", id: c.id })}>
-                    <strong>{c.name}</strong>
-                    <span className="muted small">
-                      {[c.phone, c.instagram && "@" + c.instagram, last ? t.clients.lastVisit(fmtDate(last)) : t.clients.noVisits]
-                        .filter(Boolean)
-                        .join(" · ")}
+                    <Avatar name={c.name} />
+                    <span className="list-text">
+                      <strong>{c.name}</strong>
+                      <span className="muted small">
+                        {[c.phone, c.instagram && "@" + c.instagram, last ? t.clients.lastVisit(fmtDate(last)) : t.clients.noVisits]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
                     </span>
+                    <ChevronRight className="chev" size={18} />
                   </button>
                 );
               })}
@@ -131,7 +144,7 @@ function ClientCard({ client, onEdit }: { client: Client; onEdit: () => void }) 
   return (
     <div className="screen">
       <TopBar
-        title={client.name}
+        title=""
         left={<CloseButton onClick={() => back({ screen: "clients" })} />}
         right={
           <button className="link-btn" onClick={onEdit}>
@@ -140,7 +153,15 @@ function ClientCard({ client, onEdit }: { client: Client; onEdit: () => void }) 
         }
       />
       <main className="content stack">
-        <ContactLinks client={client} />
+        <div className="profile">
+          <Avatar name={client.name} size={72} />
+          <h2 className="profile-name">{client.name}</h2>
+          <ContactLinks client={client} />
+          <button className="link-btn with-icon" onClick={() => saveToPhoneContacts(client)}>
+            <BookUser size={18} />
+            {t.clients.saveToContacts}
+          </button>
+        </div>
         {client.reminderChannel !== "none" && (
           <p className="muted small">{t.clients.remindVia(t.channels[client.reminderChannel])}</p>
         )}
@@ -248,6 +269,18 @@ function ClientForm({ client, onDone }: { client?: Client; onDone?: () => void }
         }
       />
       <main className="content">
+        {!client && canPickContacts && (
+          <button
+            className="btn wide-btn first"
+            onClick={async () => {
+              const c = await pickContact(settings.country);
+              if (c) set({ name: c.name, phone: c.phone ?? "" });
+            }}
+          >
+            <Contact size={18} />
+            {t.clients.pickContact}
+          </button>
+        )}
         <div className="fields">
           <label>
             {t.clients.name}

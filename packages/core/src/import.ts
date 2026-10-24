@@ -162,6 +162,25 @@ export function clientsFromVcf(text: string, country: Country): ClientDraft[] {
   return drafts;
 }
 
+/**
+ * Клиент → vCard 3.0 для телефонной книги. Сайт не может сам записать контакт в телефон,
+ * поэтому приложение отдаёт этот файл системе, а та предлагает «Создать новый контакт».
+ */
+export function clientToVcf(c: Pick<ClientDraft, "name" | "phone" | "telegram" | "instagram" | "notes">): string {
+  const [first = "", ...rest] = c.name.trim().split(/\s+/);
+  const lines = ["BEGIN:VCARD", "VERSION:3.0", `N:${escapeVcf(rest.join(" "))};${escapeVcf(first)};;;`, `FN:${escapeVcf(c.name.trim())}`];
+  if (c.phone) lines.push(`TEL;TYPE=CELL:${c.phone}`);
+  if (c.instagram) lines.push(`X-SOCIALPROFILE;type=instagram:https://instagram.com/${c.instagram}`);
+  if (c.telegram) lines.push(`X-SOCIALPROFILE;type=telegram:https://t.me/${c.telegram}`);
+  if (c.notes) lines.push(`NOTE:${escapeVcf(c.notes)}`);
+  lines.push("END:VCARD");
+  return lines.join("\r\n") + "\r\n";
+}
+
+function escapeVcf(v: string): string {
+  return v.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/([,;])/g, "\\$1");
+}
+
 function unescapeVcf(v: string): string {
   return v.replace(/\\n/gi, "\n").replace(/\\([,;\\])/g, "$1").trim();
 }

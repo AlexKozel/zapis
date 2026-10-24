@@ -33,7 +33,8 @@ function Screen({ route }: { route: Route }) {
     case "day":
       return <CalendarScreen view="day" date={route.date} saved={route.saved} />;
     case "week":
-      return <CalendarScreen view="week" date={route.date} />;
+    case "month":
+      return <CalendarScreen view={route.screen} date={route.date} />;
     case "new":
       return (
         <NewAppointmentScreen

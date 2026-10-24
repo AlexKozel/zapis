@@ -45,6 +45,22 @@ export function addDays(key: DayKey, n: number): DayKey {
   return dayKey(new Date(y, m, d + n, 12).getTime());
 }
 
+/** Первое число месяца. */
+export function monthStart(key: DayKey): DayKey {
+  return key.slice(0, 8) + "01";
+}
+
+/** Первое число месяца, отстоящего на n месяцев. */
+export function addMonths(key: DayKey, n: number): DayKey {
+  const [y, m] = parts(key);
+  return dayKey(new Date(y, m + n, 1, 12).getTime());
+}
+
+/** Сколько дней от a до b (b позже — положительное). */
+export function dayDiff(a: DayKey, b: DayKey): number {
+  return Math.round((anchor(b) - anchor(a)) / (24 * HOUR));
+}
+
 /** Понедельник недели, в которую входит день. */
 export function weekStart(key: DayKey): DayKey {
   return addDays(key, -(isoWeekday(key) - 1));
@@ -85,10 +101,21 @@ export const fmtTime = (ms: number) => dateFmt("time", { hour: "2-digit", minute
 export const fmtDay = (key: DayKey) => dateFmt("day", { weekday: "long", day: "numeric", month: "long" }).format(noon(key));
 export const fmtShortDay = (key: DayKey) =>
   dateFmt("shortDay", { weekday: "short", day: "numeric", month: "short" }).format(noon(key));
-export const fmtDate = (ms: number) => dateFmt("date", { day: "numeric", month: "short", year: "numeric" }).format(ms);
+/** Дата визита: год — только если он не текущий. */
+export const fmtDate = (ms: number) =>
+  new Date(ms).getFullYear() === new Date().getFullYear()
+    ? dateFmt("date", { day: "numeric", month: "short" }).format(ms)
+    : dateFmt("dateYear", { day: "numeric", month: "short", year: "numeric" }).format(ms);
 export const fmtWeekday = (key: DayKey) => dateFmt("weekday", { weekday: "short" }).format(noon(key));
 export const fmtWeekdayLong = (key: DayKey) => dateFmt("weekdayLong", { weekday: "long" }).format(noon(key));
 export const dayOfMonth = (key: DayKey) => Number(key.slice(8));
+export const fmtMonth = (key: DayKey) => dateFmt("month", { month: "long", year: "numeric" }).format(noon(key));
+
+/** Коротко для ячейки месяца: 285 мин → «4,5 ч» (вниз до получаса, чтобы не обещать лишнего). */
+export function fmtHours(min: number): string {
+  const hours = Math.floor(min / 30) / 2;
+  return t.hoursShort(new Intl.NumberFormat(locale).format(hours));
+}
 
 export function fmtDuration(min: number): string {
   return t.duration(Math.floor(min / 60), min % 60);

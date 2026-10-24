@@ -6,7 +6,8 @@ import { useServices, useSettings } from "../data.ts";
 import { t } from "../i18n/index.ts";
 import { back, go } from "../router.ts";
 import { fmtDuration, fmtMoney } from "../time.ts";
-import { CloseButton, TopBar } from "../ui.tsx";
+import { ChevronRight } from "lucide-react";
+import { CloseButton, nextColor, PALETTE, serviceStyle, TopBar } from "../ui.tsx";
 
 function rangeText(from: string, to: string): string {
   return from === to ? from : `${from} – ${to}`;
@@ -17,7 +18,7 @@ export function ServicesScreen() {
   const settings = useSettings();
   return (
     <div className="screen">
-      <TopBar title={t.services.title} />
+      <TopBar title={t.services.title} large />
       <main className="content">
         <div className="toolbar">
           <button className="btn primary" onClick={() => go({ screen: "service", id: "new" })}>
@@ -27,15 +28,19 @@ export function ServicesScreen() {
         <div className="list">
           {services?.map((s) => (
             <button key={s.id} className="list-row" onClick={() => go({ screen: "service", id: s.id })}>
-              <strong>
-                {s.name} {s.isConsultation && <span className="tag">{t.services.consultation}</span>}
-              </strong>
-              <span className="muted small">
-                {rangeText(fmtDuration(s.durationMinMin), fmtDuration(s.durationMaxMin))}
-                {s.bufferAfterMin > 0 && ` (${t.services.buffer(s.bufferAfterMin)})`}
-                {s.priceMax > 0 &&
-                  " · " + rangeText(fmtMoney(s.priceMin, settings.currency), fmtMoney(s.priceMax, settings.currency))}
+              <span className="swatch" style={serviceStyle(s)} aria-hidden="true" />
+              <span className="list-text">
+                <strong>
+                  {s.name} {s.isConsultation && <span className="tag">{t.services.consultation}</span>}
+                </strong>
+                <span className="muted small">
+                  {rangeText(fmtDuration(s.durationMinMin), fmtDuration(s.durationMaxMin))}
+                  {s.bufferAfterMin > 0 && ` (${t.services.buffer(s.bufferAfterMin)})`}
+                  {s.priceMax > 0 &&
+                    " · " + rangeText(fmtMoney(s.priceMin, settings.currency), fmtMoney(s.priceMax, settings.currency))}
+                </span>
               </span>
+              <ChevronRight className="chev" size={18} />
             </button>
           ))}
         </div>
@@ -54,6 +59,7 @@ export function ServiceScreen({ id }: { id: string }) {
 
 function ServiceForm({ service }: { service?: Service }) {
   const settings = useSettings();
+  const services = useServices();
   // Цены в форме — в рублях/злотых, в базе — в копейках/грошах.
   const [form, setForm] = useState({
     name: service?.name ?? "",
@@ -63,7 +69,10 @@ function ServiceForm({ service }: { service?: Service }) {
     priceMin: (service?.priceMin ?? 0) / 100,
     priceMax: (service?.priceMax ?? 0) / 100,
     isConsultation: service?.isConsultation ?? false,
+    color: service?.color as number | undefined,
   });
+  // Новой услуге — первый свободный цвет палитры (список услуг загружается не сразу).
+  const color = form.color ?? nextColor((services ?? []).filter((s) => s.id !== service?.id));
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
   const valid =
     form.name.trim() !== "" &&
@@ -85,6 +94,7 @@ function ServiceForm({ service }: { service?: Service }) {
       priceMin: Math.round(form.priceMin * 100),
       priceMax: Math.round(form.priceMax * 100),
       isConsultation: form.isConsultation || undefined,
+      color,
     });
     close();
   }
@@ -164,6 +174,19 @@ function ServiceForm({ service }: { service?: Service }) {
               onChange={(e) => set({ bufferAfterMin: num(e.target.value) })}
             />
           </label>
+          <div className="wide palette" role="radiogroup" aria-label={t.services.color}>
+            {PALETTE.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                role="radio"
+                aria-checked={color === i}
+                className="palette-dot"
+                style={serviceStyle({ id: "", color: i })}
+                onClick={() => set({ color: i })}
+              />
+            ))}
+          </div>
           <label className="check wide">
             <input type="checkbox" checked={form.isConsultation} onChange={(e) => set({ isConsultation: e.target.checked })} />
             {t.services.isConsultation}

@@ -13,7 +13,7 @@ const TABLES: SyncTable[] = ["services", "clients", "appointments"];
 export function SettingsScreen() {
   return (
     <div className="screen">
-      <TopBar title={t.settings.title} />
+      <TopBar title={t.settings.title} large />
       <main className="content stack">
         <Backup />
         <WorkHours />
